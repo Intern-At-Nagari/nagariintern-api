@@ -1,26 +1,38 @@
 const {
-  Status,
-  TipeDokumen,
+  UnitKerja,
   Permintaan,
-  Dokumen,
-  Smk,
+  PerguruanTinggi,
+
+  Prodi,
   Jurusan,
   Users,
-  Siswa,
-  UnitKerja,
-  PerguruanTinggi,
-  Prodi,
   Mahasiswa,
+  Siswa,
   Karyawan,
   Kehadiran,
+  Status,
+  RekapKehadiran,
+  Dokumen,
+  Smk,
   Jadwal,
 } = require("../models/index");
-const path = require("path");
+
 const { Op } = require("sequelize");
 const fs = require("fs");
 const { where } = require("sequelize");
 
+const PizZip = require("pizzip");
+const Docxtemplater = require("docxtemplater");
+const path = require("path");
 
+const sequelize = require("sequelize");
+const libre = require("libreoffice-convert");
+const util = require("util");
+const convert = util.promisify(libre.convert);
+const nodemailer = require("nodemailer");
+const bcrypt = require("bcrypt");
+const { get } = require("http");
+const ejs = require("ejs");
 
 const dahsboardData = async (_, res) => {
   try {
