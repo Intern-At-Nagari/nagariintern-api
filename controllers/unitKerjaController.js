@@ -35,6 +35,43 @@ const { get } = require("http");
 const ejs = require("ejs");
 
 
+
+const calculateAvailableQuota = async () => {
+  const unitKerjas = await UnitKerja.findAll();
+  const acceptedRequests = await Permintaan.findAll({
+    where: {
+      statusId: {
+        [sequelize.Op.in]: [2, 3, 4],
+      },
+    },
+    attributes: [
+      "unitKerjaId",
+      "type",
+      [sequelize.fn("COUNT", sequelize.col("id")), "count"],
+    ],
+    group: ["unitKerjaId", "type"],
+  });
+
+  return unitKerjas.map((unit) => {
+    const mhsCount =
+      acceptedRequests
+        .find((r) => r.unitKerjaId === unit.id && r.type === "mahasiswa")
+        ?.get("count") || 0;
+
+    const siswaCount =
+      acceptedRequests
+        .find((r) => r.unitKerjaId === unit.id && r.type === "siswa")
+        ?.get("count") || 0;
+
+    return {
+      ...unit.toJSON(),
+      sisaKuotaMhs: Math.max(0, (unit.kuotaMhs || 0) - mhsCount),
+      sisaKuotaSiswa: Math.max(0, (unit.kuotaSiswa || 0) - siswaCount),
+    };
+  });
+};
+
+
 const getAllUnitKerja = async (req, res) => {
   try {
     const unitKerjaWithQuota = await calculateAvailableQuota();
