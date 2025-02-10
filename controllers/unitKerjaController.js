@@ -1,0 +1,84 @@
+const getAllUnitKerja = async (req, res) => {
+  try {
+    const unitKerjaWithQuota = await calculateAvailableQuota();
+    return res.status(200).json({
+      unitKerja: unitKerjaWithQuota,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+const editKuotaUnitKerja = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { tipe_cabang, kuotaMhs, kuotaSiswa, isCustomQuota } = req.body;
+
+    const unitKerja = await UnitKerja.findByPk(id);
+    if (!unitKerja) {
+      return res.status(404).json({ error: "Unit kerja tidak ditemukan." });
+    }
+
+    let kuota = { kuotaMhs, kuotaSiswa };
+
+    // If not using custom quota, apply preset values based on branch type
+    if (!isCustomQuota && tipe_cabang) {
+      if (
+        !["pusat", "utama", "a", "b", "c", ""].includes(
+          tipe_cabang.toLowerCase()
+        )
+      ) {
+        return res.status(400).json({ error: "Tipe cabang tidak valid." });
+      }
+
+      switch (tipe_cabang.toLowerCase()) {
+        case "pusat":
+          kuota = { kuotaMhs: 0, kuotaSiswa: 16 };
+          break;
+        case "utama":
+          kuota = { kuotaMhs: 0, kuotaSiswa: 25 };
+          break;
+        case "a":
+          kuota = { kuotaMhs: 8, kuotaSiswa: 10 };
+          break;
+        case "b":
+          kuota = { kuotaMhs: 3, kuotaSiswa: 8 };
+          break;
+        case "c":
+          kuota = { kuotaMhs: 2, kuotaSiswa: 5 };
+          break;
+      }
+      unitKerja.tipe_cabang = tipe_cabang;
+    }
+    // If using custom quota, validate the input values
+    else if (isCustomQuota) {
+      if (kuotaMhs === undefined || kuotaSiswa === undefined) {
+        return res
+          .status(400)
+          .json({ error: "Kuota mahasiswa dan siswa harus diisi." });
+      }
+      if (kuotaMhs < 0 || kuotaSiswa < 0) {
+        return res
+          .status(400)
+          .json({ error: "Kuota tidak boleh bernilai negatif." });
+      }
+    }
+
+    unitKerja.kuotaMhs = kuota.kuotaMhs;
+    unitKerja.kuotaSiswa = kuota.kuotaSiswa;
+    await unitKerja.save();
+
+    const unitKerjaWithQuota = await calculateAvailableQuota();
+    return res.status(200).json({
+      message: "Unit kerja berhasil diperbarui.",
+      unitKerja: unitKerjaWithQuota,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+module.exports = {
+  getAllUnitKerja,
+  editKuotaUnitKerja,
+};

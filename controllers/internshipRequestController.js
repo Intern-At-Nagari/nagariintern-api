@@ -17,6 +17,10 @@ const {
 } = require("../models/index");
 const path = require("path");
 const { Op } = require("sequelize");
+const fs = require("fs");
+const { where } = require("sequelize");
+
+
 
 const createPermintaanMagangSiswa = async (req, res) => {
   try {
@@ -144,8 +148,6 @@ const createPermintaanMagangSiswa = async (req, res) => {
     ];
     await Dokumen.bulkCreate(documents);
 
-    
-
     res.status(201).json({
       message: "Permintaan magang berhasil dibuat",
       data: {
@@ -227,7 +229,6 @@ const createPermintaanMagangMahasiswa = async (req, res) => {
       });
     }
 
-
     // Validate dates
     const startDate = new Date(tanggalMulai);
     const endDate = new Date(tanggalSelesai);
@@ -237,8 +238,6 @@ const createPermintaanMagangMahasiswa = async (req, res) => {
       });
     }
 
-
-    
     const nowDate = new Date();
 
     const jadwalPendaftaran = await Jadwal.findOne({
@@ -257,7 +256,6 @@ const createPermintaanMagangMahasiswa = async (req, res) => {
         error: "Pendaftaran magang sudah ditutup",
       });
     }
-
 
     console.log(perguruanTinggi, ">>>>>>>>>>>>>>>>>>>>>>>");
     const perguruanTinggiRecord = await PerguruanTinggi.findOne({
@@ -327,7 +325,6 @@ const createPermintaanMagangMahasiswa = async (req, res) => {
     ];
 
     await Dokumen.bulkCreate(documents);
-
 
     // Send success response
     res.status(201).json({
@@ -446,6 +443,7 @@ const getMyPermintaanMagang = async (req, res) => {
       statusState: permintaan.statusState,
       unitKerja: permintaan.UnitKerjaPengajuan?.name || null,
       penempatan: permintaan.UnitKerjaPenempatan?.name || null,
+      keterangan: permintaan.keterangan,
       dokumen: permintaan.Dokumens
         ? permintaan.Dokumens.map((doc) => ({
             tipe: doc.tipeDokumen?.name || null,
@@ -630,6 +628,225 @@ const getAllPermintaanMagang = async (req, res) => {
   }
 };
 
+const getPermintaanMagangById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const permintaanMagang = await Permintaan.findByPk(id, {
+      include: [
+        {
+          model: Users,
+          attributes: ["email"],
+          include: [
+            {
+              model: Siswa,
+              attributes: ["name", "nisn", "no_hp", "alamat"],
+            },
+            {
+              model: Mahasiswa,
+              attributes: ["name", "nim", "no_hp", "alamat"],
+            },
+          ],
+        },
+        { model: Smk, attributes: ["name"] },
+        { model: Jurusan, attributes: ["name"] },
+        {
+          model: UnitKerja,
+          as: "UnitKerjaPengajuan",
+          attributes: ["name"],
+        },
+        {
+          model: UnitKerja,
+          as: "UnitKerjaPenempatan",
+          attributes: ["name"],
+        },
+        {
+          model: Dokumen,
+          required: false,
+          include: [
+            {
+              model: TipeDokumen,
+              as: "tipeDokumen",
+              attributes: ["name"],
+            },
+          ],
+        },
+        { model: PerguruanTinggi, attributes: ["name"] },
+        { model: Prodi, attributes: ["name"] },
+        { model: Status },
+        { model: Kehadiran },
+      ],
+      order: [[Kehadiran, "id", "ASC"]], // Tambahkan order di sini
+    });
+
+    if (!permintaanMagang) {
+      return res.status(404).json({
+        message: "Permintaan magang tidak ditemukan.",
+      });
+    }
+
+    res.status(200).json(permintaanMagang);
+  } catch (error) {
+    console.error("Error in getPermintaanMagangById:", error.message || error);
+    res.status(500).json({
+      message: "Terjadi kesalahan pada server.",
+      error: error.message,
+    });
+  }
+};
+
+const rejectedStatusPermintaanMagang = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { keterangan } = req.body;
+    console.log(req.body, "BODY>>>>>>>>>>>>>>>>>>>>>");
+
+    const permintaanMagang = await Permintaan.findByPk(id);
+
+    if (!permintaanMagang) {
+      return res
+        .status(404)
+        .json({ error: "Permintaan magang tidak ditemukan." });
+    }
+
+    await permintaanMagang.update({
+      statusId: 2,
+      statusState: "rejected",
+      keterangan: keterangan,
+    });
+
+    res.status(200).json({
+      message: "Permintaan magang berhasil ditolak.",
+      data: permintaanMagang,
+    });
+  } catch (error) {
+    console.error(
+      "Error in rejectStatusPermintaanMagang:",
+      error.message || error
+    );
+    res.status(500).json({ error: "Terjadi kesalahan pada server." });
+  }
+};
+
+const rejectStatusPermintaanMagang = async (req, res) => {
+  try {
+    const userId = req.userId;
+
+    const permintaanMagang = await Permintaan.findOne({
+      where: { userId: userId },
+    });
+
+    if (!permintaanMagang) {
+      return res
+        .status(404)
+        .json({ error: "Permintaan magang tidak ditemukan." });
+    }
+
+    await permintaanMagang.update({
+      statusState: "reject",
+    });
+
+    res.status(200).json({
+      message: "Permintaan magang berhasil ditolak.",
+      data: permintaanMagang,
+    });
+  } catch (error) {
+    console.error(
+      "Error in rejectStatusPermintaanMagang:",
+      error.message || error
+    );
+    res.status(500).json({ error: "Terjadi kesalahan pada server." });
+  }
+};
+
+const approveStatusPermintaanMagang = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { penempatan } = req.body;
+
+    console.log(req.body);
+    const permintaanMagang = await Permintaan.findByPk(id);
+
+    if (!permintaanMagang) {
+      return res
+        .status(404)
+        .json({ error: "Permintaan magang tidak ditemukan." });
+    }
+
+    // Validate penempatan exists in UnitKerja
+    if (penempatan) {
+      const unitKerja = await UnitKerja.findByPk(penempatan);
+      if (!unitKerja) {
+        return res
+          .status(400)
+          .json({ error: "Unit kerja penempatan tidak valid" });
+      }
+
+      // Check and update quota based on internship type
+      if (permintaanMagang.type === "siswa") {
+        if (unitKerja.kuotaSiswa <= 0) {
+          return res
+            .status(400)
+            .json({ error: "Kuota siswa magang sudah penuh" });
+        }
+        await unitKerja.update({
+          kuotaSiswa: unitKerja.kuotaSiswa - 1,
+        });
+      } else if (permintaanMagang.type === "mahasiswa") {
+        if (unitKerja.kuotaMhs <= 0) {
+          return res
+            .status(400)
+            .json({ error: "Kuota mahasiswa magang sudah penuh" });
+        }
+        await unitKerja.update({
+          kuotaMhs: unitKerja.kuotaMhs - 1,
+        });
+      }
+    }
+
+    // Update both penempatan and unitKerjaId if penempatan provided
+    const updateData = {};
+    if (penempatan) {
+      updateData.penempatan = penempatan;
+      updateData.unitKerjaId = penempatan;
+    }
+
+    await permintaanMagang.update(updateData);
+
+    res.status(200).json({
+      message: "Penempatan magang berhasil diperbarui.",
+      data: permintaanMagang,
+    });
+  } catch (error) {
+    console.error(
+      "Error in approveStatusPermintaanMagang:",
+      error.message || error
+    );
+    res.status(500).json({ error: "Terjadi kesalahan pada server." });
+  }
+};
+
+const deletePermintaanMagang = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const permintaanMagang = await PermintaanMagang.findByPk(id);
+
+    if (!permintaanMagang) {
+      return res
+        .status(404)
+        .json({ error: "Permintaan magang tidak ditemukan." });
+    }
+
+    await permintaanMagang.destroy();
+
+    res.status(200).json({ message: "Permintaan magang berhasil dihapus." });
+  } catch (error) {
+    console.error("Error in deletePermintaanMagang:", error.message || error);
+    res.status(500).json({ error: "Terjadi kesalahan pada server." });
+  }
+};
+
 const cabangPermintaanMagang = async (req, res) => {
   try {
     const userId = req.userId;
@@ -767,397 +984,16 @@ const cabangPermintaanMagang = async (req, res) => {
     });
   }
 };
-const getPermintaanMagangById = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const permintaanMagang = await Permintaan.findByPk(id, {
-      include: [
-        {
-          model: Users,
-          attributes: ["email"],
-          include: [
-            {
-              model: Siswa,
-              attributes: ["name", "nisn", "no_hp", "alamat"],
-            },
-            {
-              model: Mahasiswa,
-              attributes: ["name", "nim", "no_hp", "alamat"],
-            },
-          ],
-        },
-        { model: Smk, attributes: ["name"] },
-        { model: Jurusan, attributes: ["name"] },
-        {
-          model: UnitKerja,
-          as: "UnitKerjaPengajuan",
-          attributes: ["name"],
-        },
-        {
-          model: UnitKerja,
-          as: "UnitKerjaPenempatan",
-          attributes: ["name"],
-        },
-        {
-          model: Dokumen,
-          required: false,
-          include: [
-            {
-              model: TipeDokumen,
-              as: "tipeDokumen",
-              attributes: ["name"],
-            },
-          ],
-        },
-        { model: PerguruanTinggi, attributes: ["name"] },
-        { model: Prodi, attributes: ["name"] },
-        { model: Status },
-        { model: Kehadiran },
-      ],
-      order: [[Kehadiran, "id", "ASC"]], // Tambahkan order di sini
-
-    });
-
-    if (!permintaanMagang) {
-      return res.status(404).json({
-        message: "Permintaan magang tidak ditemukan.",
-      });
-    }
-
-    res.status(200).json(permintaanMagang);
-  } catch (error) {
-    console.error("Error in getPermintaanMagangById:", error.message || error);
-    res.status(500).json({
-      message: "Terjadi kesalahan pada server.",
-      error: error.message,
-    });
-  }
-};
-
-const sendSuratPernyataan = async (req, res) => {
-  try {
-    const userId = req.userId;
-    const fileSuratPernyataanSiswa = req.files.fileSuratPernyataanSiswa;
-    const fileSuratPernyataanWali = req.files.fileSuratPernyataanWali;
-    const fileTabungan = req.files.fileTabungan;
-    const { nomorRekening } = req.body;
-
-    const permintaan = await Permintaan.findOne({
-      where: { userId: userId },
-    });
-
-    const user =
-      (await Mahasiswa.findOne({ where: { userId } })) ||
-      (await Siswa.findOne({ where: { userId } }));
-
-    await user.update({
-      rekening: nomorRekening,
-    });
-    await permintaan.update({
-      statusId: 3,
-    });
-
-    if (!permintaan) {
-      return res.status(404).json({
-        status: "error",
-        message: "Permintaan magang tidak ditemukan",
-      });
-    }
-
-    if (
-      !fileSuratPernyataanSiswa ||
-      !fileSuratPernyataanWali ||
-      !fileTabungan
-    ) {
-      return res.status(400).json({
-        status: "error",
-        message: "File surat balasan harus diunggah",
-      });
-    }
-
-    const documents = [
-      {
-        permintaanId: permintaan.id,
-        tipeDokumenId: 6,
-        url: req.files.fileSuratPernyataanWali[0].filename,
-      },
-      {
-        permintaanId: permintaan.id,
-        tipeDokumenId: 7,
-        url: req.files.fileSuratPernyataanSiswa[0].filename,
-      },
-      {
-        permintaanId: permintaan.id,
-        tipeDokumenId: 10,
-        url: req.files.fileTabungan[0].filename,
-      },
-    ];
-    await Dokumen.bulkCreate(documents);
-
-    return res.status(200).json({
-      status: "success",
-      message: "Surat pernyataan berhasil diunggah",
-    });
-  } catch (error) {
-    console.error("Error:", error);
-    return res.status(500).json({
-      status: "error",
-      message: "Internal server error",
-      error: error.message,
-    });
-  }
-};
-
-const rejectedStatusPermintaanMagang = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { keterangan } = req.body;
-
-    const permintaanMagang = await Permintaan.findByPk(id);
-
-    if (!permintaanMagang) {
-      return res
-        .status(404)
-        .json({ error: "Permintaan magang tidak ditemukan." });
-    }
-
-    await permintaanMagang.update({
-      statusId: 5,
-      keterangan: keterangan,
-    });
-
-    res.status(200).json({
-      message: "Permintaan magang berhasil ditolak.",
-      data: permintaanMagang,
-    });
-  } catch (error) {
-    console.error(
-      "Error in rejectStatusPermintaanMagang:",
-      error.message || error
-    );
-    res.status(500).json({ error: "Terjadi kesalahan pada server." });
-  }
-};
-
-const rejectStatusPermintaanMagang = async (req, res) => {
-  try {
-    const userId = req.userId;
-
-    const permintaanMagang = await Permintaan.findOne({
-      where: { userId: userId },
-    });
-
-    if (!permintaanMagang) {
-      return res
-        .status(404)
-        .json({ error: "Permintaan magang tidak ditemukan." });
-    }
-
-    await permintaanMagang.update({
-      statusState: "rejected",
-    });
-
-    res.status(200).json({
-      message: "Permintaan magang berhasil ditolak.",
-      data: permintaanMagang,
-    });
-  } catch (error) {
-    console.error(
-      "Error in rejectStatusPermintaanMagang:",
-      error.message || error
-    );
-    res.status(500).json({ error: "Terjadi kesalahan pada server." });
-  }
-};
-
-const approveStatusPermintaanMagang = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { penempatan } = req.body;
-
-    console.log(req.body);
-    const permintaanMagang = await Permintaan.findByPk(id);
-
-    if (!permintaanMagang) {
-      return res
-        .status(404)
-        .json({ error: "Permintaan magang tidak ditemukan." });
-    }
-
-    // Validate penempatan exists in UnitKerja
-    if (penempatan) {
-      const unitKerja = await UnitKerja.findByPk(penempatan);
-      if (!unitKerja) {
-        return res
-          .status(400)
-          .json({ error: "Unit kerja penempatan tidak valid" });
-      }
-
-      // Check and update quota based on internship type
-      if (permintaanMagang.type === "siswa") {
-        if (unitKerja.kuotaSiswa <= 0) {
-          return res
-            .status(400)
-            .json({ error: "Kuota siswa magang sudah penuh" });
-        }
-        await unitKerja.update({
-          kuotaSiswa: unitKerja.kuotaSiswa - 1,
-        });
-      } else if (permintaanMagang.type === "mahasiswa") {
-        if (unitKerja.kuotaMhs <= 0) {
-          return res
-            .status(400)
-            .json({ error: "Kuota mahasiswa magang sudah penuh" });
-        }
-        await unitKerja.update({
-          kuotaMhs: unitKerja.kuotaMhs - 1,
-        });
-      }
-    }
-
-    // Update both penempatan and unitKerjaId if penempatan provided
-    const updateData = {};
-    if (penempatan) {
-      updateData.penempatan = penempatan;
-      updateData.unitKerjaId = penempatan;
-    }
-
-    await permintaanMagang.update(updateData);
-
-    res.status(200).json({
-      message: "Penempatan magang berhasil diperbarui.",
-      data: permintaanMagang,
-    });
-  } catch (error) {
-    console.error(
-      "Error in approveStatusPermintaanMagang:",
-      error.message || error
-    );
-    res.status(500).json({ error: "Terjadi kesalahan pada server." });
-  }
-};
-
-const deletePermintaanMagang = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const permintaanMagang = await PermintaanMagang.findByPk(id);
-
-    if (!permintaanMagang) {
-      return res
-        .status(404)
-        .json({ error: "Permintaan magang tidak ditemukan." });
-    }
-
-    await permintaanMagang.destroy();
-
-    res.status(200).json({ message: "Permintaan magang berhasil dihapus." });
-  } catch (error) {
-    console.error("Error in deletePermintaanMagang:", error.message || error);
-    res.status(500).json({ error: "Terjadi kesalahan pada server." });
-  }
-};
-
-const fs = require("fs");
-const { where } = require("sequelize");
-
-const downloadSuratBalasan = async (req, res) => {
-  try {
-    const userId = req.userId;
-
-    const permintaan = await Permintaan.findOne({
-      where: { userId: userId },
-      include: [
-        {
-          model: Dokumen,
-          required: false,
-          include: [
-            {
-              model: TipeDokumen,
-              as: "tipeDokumen",
-              attributes: ["name"],
-            },
-          ],
-        },
-      ],
-    });
-
-    if (!permintaan) {
-      return res.status(404).json({
-        message: "Data permintaan tidak ditemukan",
-      });
-    }
-
-    const suratPernyataan = permintaan.Dokumens.find(
-      (doc) => doc.tipeDokumenId === 7
-    );
-
-    if (!suratPernyataan) {
-      return res.status(404).json({
-        message: "Surat pernyataan tidak ditemukan",
-      });
-    }
-
-    const filePath = path.join(
-      __dirname,
-      "..",
-      "public",
-      "uploads",
-      suratPernyataan.url
-    );
-
-    // Check if the file exists
-    if (!fs.existsSync(filePath)) {
-      return res
-        .status(404)
-        .json({ message: "File tidak ditemukan di server" });
-    }
-
-    const mimeType =
-      path.extname(filePath).toLowerCase() === ".pdf"
-        ? "application/pdf"
-        : "application/octet-stream";
-
-    // Send the file
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${path.basename(filePath)}"`
-    );
-    res.setHeader("Content-Type", mimeType);
-
-    const fileStream = fs.createReadStream(filePath);
-    fileStream.on("error", (err) => {
-      console.error("File Stream Error:", err);
-      if (!res.headersSent) {
-        res.status(500).json({ message: "Gagal membaca file" });
-      }
-      v;
-    });
-
-    fileStream.pipe(res);
-  } catch (error) {
-    console.error("Error in downloadSuratBalasan:", error.message || error);
-    if (!res.headersSent) {
-      res.status(500).json({
-        message: "Terjadi kesalahan pada server",
-        error: error.message,
-      });
-    }
-  }
-};
 
 module.exports = {
   createPermintaanMagangSiswa,
   createPermintaanMagangMahasiswa,
   getAllPermintaanMagang,
   getPermintaanMagangById,
+  getMyPermintaanMagang,
   approveStatusPermintaanMagang,
   rejectedStatusPermintaanMagang,
   rejectStatusPermintaanMagang,
   deletePermintaanMagang,
-  getMyPermintaanMagang,
-  sendSuratPernyataan,
-  downloadSuratBalasan,
   cabangPermintaanMagang,
 };

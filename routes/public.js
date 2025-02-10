@@ -1,9 +1,18 @@
 const express = require("express");
 const router = express.Router();
+const path = require("path");
+
+const {
+  findOneJadwalPendaftaran,
+} = require("../controllers/scheduleController");
 const axios = require("axios");
 const { Op } = require("sequelize");
 const { PerguruanTinggi, UnitKerja } = require("../models/index");
 
+router.get("/", (req, res) => {
+  res.send("Welcome to the API");
+});
+router.get("/jadwal-curent", findOneJadwalPendaftaran);
 router.get("/sekolah", async (req, res) => {
   try {
     const schoolName = req.query.sekolah;
@@ -67,21 +76,32 @@ router.get("/universitas", async (req, res) => {
 });
 
 router.get("/unit-kerja", async (req, res) => {
+  try {
+    const unitKerja = await UnitKerja.findAll();
 
-    try {
-      const unitKerja = await UnitKerja.findAll();
+    res.json({
+      status: "success",
+      dataUnitKerja: unitKerja,
+    });
+  } catch (error) {
+    console.error("Error fetching unit kerja:", error.message);
+    res.status(500).json({
+      error: "Terjadi kesalahan saat mengambil data unit kerja",
+      details: error.message,
+    });
+  }
+});
 
-      res.json({
-        status: "success",
-        dataUnitKerja: unitKerja,
-      });
-    } catch (error) {
-      console.error("Error fetching unit kerja:", error.message);
-      res.status(500).json({
-        error: "Terjadi kesalahan saat mengambil data unit kerja",
-        details: error.message,
-      });
+router.get("/download/:filename", (req, res) => {
+  const filename = req.params.filename;
+  const filePath = path.join(__dirname, "..", "public", "uploads", filename);
+
+  console.log("Download file:", filePath);
+  res.download(filePath, filename, (err) => {
+    if (err) {
+      res.status(500).send("Error saat mengunduh file");
     }
   });
-  
+});
+
 module.exports = router;

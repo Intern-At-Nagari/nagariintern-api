@@ -7,13 +7,6 @@ const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 const { log } = require("console");
 
-// const loginLimiter = rateLimit({
-//   windowMs: 15 * 60 * 1000,
-//   max: 5,
-//   message:
-//     "Too many login attempts from this IP, please try again after 15 minutes",
-// });
-
 const login = async (req, res) => {
   const { email, password } = req.body;
 
@@ -234,8 +227,8 @@ const verifyEmail = async (req, res) => {
     });
 
     if (!user) {
-      return res.status(400).render('EmailVerificationError', {
-        error: "Token verifikasi tidak valid atau sudah kadaluarsa"
+      return res.status(400).render("EmailVerificationError", {
+        error: "Token verifikasi tidak valid atau sudah kadaluarsa",
       });
     }
 
@@ -244,12 +237,11 @@ const verifyEmail = async (req, res) => {
     await user.save();
 
     // Render the success page instead of sending JSON
-    return res.render('EmailVerified');
-
+    return res.render("EmailVerified");
   } catch (error) {
     console.error("Error in email verification:", error.message || error);
-    return res.status(500).render('EmailVerificationError', {
-      error: "Terjadi kesalahan saat memverifikasi email"
+    return res.status(500).render("EmailVerificationError", {
+      error: "Terjadi kesalahan saat memverifikasi email",
     });
   }
 };

@@ -6,10 +6,12 @@ const path = require('path');
 
 const env = process.env.NODE_ENV || 'development';
 const config = require(__dirname + '/config/config.js')[env];
-const indexRouter = require("./routes/index");
-const authRouter = require("./routes/auth");
-const proxyRouter = require("./routes/proxy");
-const adminRouter = require("./routes/admin");
+const authRoutes = require("./routes/auth");
+const adminRoutes = require("./routes/admin");
+const userRoutes = require("./routes/user");
+const publicRoutes = require("./routes/public");
+const superAdminRoutes = require("./routes/superAdmin");
+
 
 // Use CORS middleware
 app.use(cors());
@@ -30,10 +32,11 @@ app.get('/', (req, res) => {
 });
 
 // API routes
-app.use("/", indexRouter);
-app.use("/auth", authRouter);
-app.use("/api", proxyRouter);
-app.use("/admin", adminRouter);
+app.use("/", publicRoutes); // Route yang bisa diakses semua orang
+app.use("/auth", authRoutes); // Route untuk autentikasi
+app.use("/admin", adminRoutes); // Hanya untuk admin
+app.use("/superadmin", superAdminRoutes); // Hanya untuk super admin
+app.use("/", userRoutes);
 
 // Start the server
 app.listen(port, () => {
