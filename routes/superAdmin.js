@@ -35,7 +35,8 @@ const {
     getAllPermintaanMagang,
     getPermintaanMagangById,
     approveStatusPermintaanMagang,
-    rejectedStatusPermintaanMagang
+    rejectedStatusPermintaanMagang,
+    generateSuratPengambilanData
 } = require('../controllers/SuperAdminController');
 
 router.get('/unit-kerja', verifyToken, getAllUnitKerja);
@@ -71,6 +72,7 @@ router.post('/intern/send-surat-pengantar', verifyToken, uploadFields, sendSurat
 router.post('/intern/send-surat-balasan', verifyToken, uploadFields, sendSuratBalasan);
 router.post('/generate-lampiran-rekomen-mhs', verifyToken, generateLampiranRekomenMhs);
 router.post('/generate-lampiran-rekomen-siswa', verifyToken, generateLampiranRekomenSiswa);
+router.post('/generate-surat-pengambilan-data', verifyToken, generateSuratPengambilanData);
 
 router.patch('/unit-kerja/:id', verifyToken, editKuotaUnitKerja);
 router.patch('/edit-password-pegawai-cabang/:id', verifyToken, editPasswordPegawai);
