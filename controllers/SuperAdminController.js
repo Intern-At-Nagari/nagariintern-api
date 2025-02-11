@@ -19,6 +19,7 @@ const {
   Kehadiran,
   Status,
   RekapKehadiran,
+  TipeDokumen
 } = require("../models/index");
 const sequelize = require("sequelize");
 const libre = require("libreoffice-convert");
@@ -628,6 +629,7 @@ const univGenerateLetter = async (req, res) => {
     });
   }
 };
+
 const smkGenerateLetter = async (req, res) => {
   try {
     const { idSmk } = req.params;
@@ -864,6 +866,7 @@ const generateSuratPengantarMhs = async (req, res) => {
     });
   }
 };
+
 const generateSuratPengantarSiswa = async (req, res) => {
   try {
     const { idSmk, unitKerjaId } = req.params;
@@ -1072,6 +1075,21 @@ const sendSuratPengantar = async (req, res) => {
         message: "responseArray harus berupa array",
       });
     }
+
+    // Check if all participants have statusId = 3
+    for (const response of responseArray) {
+      const participant = await Permintaan.findOne({
+        where: { id: response.id }
+      });
+      
+      if (!participant || participant.statusId !== 3) {
+        return res.status(400).json({
+          status: "error", 
+          message: "Belum semua peserta mengupload surat pernyataan"
+        });
+      }
+    }
+
     if (!req.files || !req.files.SuratPengantar) {
       return res.status(400).json({
         status: "error",
@@ -1459,7 +1477,7 @@ const getPermintaanMagangById = async (req, res) => {
               attributes: ["name", "nisn", "no_hp", "alamat"],
             },
             {
-              model: Mahasiswa,
+              model: Mahasiswa, 
               attributes: ["name", "nim", "no_hp", "alamat"],
             },
           ],
@@ -1472,10 +1490,14 @@ const getPermintaanMagangById = async (req, res) => {
           attributes: ["name"],
         },
         {
-          model: UnitKerja,
+          model: UnitKerja, 
           as: "UnitKerjaPenempatan",
           attributes: ["name"],
         },
+        { model: PerguruanTinggi, attributes: ["name"] },
+        { model: Prodi, attributes: ["name"] },
+        { model: Status },
+        { model: Kehadiran },
         {
           model: Dokumen,
           required: false,
@@ -1483,17 +1505,11 @@ const getPermintaanMagangById = async (req, res) => {
             {
               model: TipeDokumen,
               as: "tipeDokumen",
-              attributes: ["name"],
             },
           ],
         },
-        { model: PerguruanTinggi, attributes: ["name"] },
-        { model: Prodi, attributes: ["name"] },
-        { model: Status },
-        { model: Kehadiran },
       ],
-      order: [[Kehadiran, "id", "ASC"]], // Tambahkan order di sini
-
+      order: [[Kehadiran, "id", "ASC"]],
     });
 
     if (!permintaanMagang) {
@@ -1502,7 +1518,21 @@ const getPermintaanMagangById = async (req, res) => {
       });
     }
 
-    res.status(200).json(permintaanMagang);
+    // Transform dokumen array into object with tipeDokumen as keys
+    const transformedData = {
+      ...permintaanMagang.toJSON(),
+      dokumen: permintaanMagang.Dokumens.reduce((acc, doc) => {
+        if (doc.tipeDokumen) {
+          acc[doc.tipeDokumen.name.toLowerCase().replace(/\s+/g, '_')] = doc.url;
+        }
+        return acc;
+      }, {}),
+    };
+
+    // Remove the original Dokumens array
+    delete transformedData.Dokumens;
+
+    res.status(200).json(transformedData);
   } catch (error) {
     console.error("Error in getPermintaanMagangById:", error.message || error);
     res.status(500).json({
@@ -1735,7 +1765,7 @@ const detailSmkDiverifikasi = async (req, res) => {
           model: Dokumen,
           where: {
             tipeDokumenId: {
-              [sequelize.Op.in]: [6, 7],
+              [sequelize.Op.in]: [6, 7, 10],
             },
           },
           required: false,
@@ -1866,10 +1896,6 @@ const editSchedule = async (req, res) => {
   }
 };
 
-
-
-
-
 const createAccountPegawaiCabang = async (req, res) => {
   try {
     const { email, unitKerjaId } = req.body;
@@ -1951,7 +1977,6 @@ const createAccountPegawaiCabang = async (req, res) => {
     });
   }
 };
-
 
 const getAccountPegawai = async (req, res) => {
   try {
@@ -2381,21 +2406,9 @@ const dahsboardData = async (_, res) => {
     });
   }
 };
+
 const getSelesai = async (req, res) => {
   try {
-    // First update status to 7 for completed internships
-    const currentDate = new Date();
-    await Permintaan.update(
-      { statusId: 7 },
-      {
-        where: {
-          tanggalSelesai: {
-            [Op.lt]: currentDate,
-          },
-          statusId: 4, // Only update if current status is 4 (active)
-        },
-      }
-    );
 
     // Then get all data with status 7
     const permintaan = await Permintaan.findAll({
