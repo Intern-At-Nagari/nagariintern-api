@@ -27,11 +27,19 @@ module.exports = {
       },
       unitKerjaId: {
         type: Sequelize.INTEGER,
-        allowNull: true
+        allowNull: true,
+        reference: {
+          model: 'unit_kerja',
+          key: 'id'
+        }
       },
       userId: {
         type: Sequelize.INTEGER,
-        allowNull: true
+        allowNull: true,
+        reference: {
+          model: 'users',
+          key: 'id'
+        }
       },
       createdAt: {
         allowNull: false,

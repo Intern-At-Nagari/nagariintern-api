@@ -13,7 +13,8 @@ const corsOptions = {
       'https://techfuture.my.id',
       'https://adminnagariintern-0e7da3590c83.herokuapp.com',
       'http://localhost:3000',
-      'http://localhost:5173'
+      'http://localhost:5173',
+      'http://localhost:5000',
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-access-token'],
@@ -27,8 +28,8 @@ app.use(cors(corsOptions));
 const indexRouter = require("./routes/intern");
 const authRouter = require("./routes/auth");
 const proxyRouter = require("./routes/proxy");
-const superadminRouter = require("./routes/superadmin");
-const adminRouter = require("./routes/admincabang"); 
+const superadminRouter = require("./routes/superAdmin");
+const adminRouter = require("./routes/adminCabang"); 
 
 
 
