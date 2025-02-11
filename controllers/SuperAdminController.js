@@ -19,6 +19,7 @@ const {
   Kehadiran,
   Status,
   RekapKehadiran,
+  TipeDokumen,
 } = require("../models/index");
 const sequelize = require("sequelize");
 const libre = require("libreoffice-convert");
