@@ -2289,6 +2289,12 @@ const dahsboardData = async (_, res) => {
       },
     });
 
+    const diverifikasi = await Permintaan.count({
+      where: {
+        statusId: 3,
+      },
+    });
+
     const pesertaSelesai = await Permintaan.count({
       where: {
         statusId: 7,
@@ -2379,6 +2385,7 @@ const dahsboardData = async (_, res) => {
       statusCounts: {
         diproses,
         diterima,
+        diverifikasi,
         pesertaMagangAktif,
         pesertaSelesai,
       },
@@ -2789,6 +2796,96 @@ const getRekapAbsensi = async (req, res) => {
   }
 };
 
+const generateSuratPengambilanData = async (req, res) => {
+  try {
+    const {
+      nomor_surat,
+      perihal,
+      detail_perihal,
+      pejabat,
+      nama_perguruan_tinggi,
+      tanggal_diajukan, 
+      nama_peneliti,
+      nim_peneliti,
+      program_studi,
+      judul_penelitian,
+      nama_perusahaan,
+      cabang,
+      nama_penerima,
+      jabatan_penerima
+    } = req.body;
+
+    // Get current date
+    const currentDate = new Date();
+
+    // Format tanggal_pendek (MM-YYYY)
+    const tanggal_pendek = `${String(currentDate.getMonth() + 1).padStart(2, '0')}-${currentDate.getFullYear()}`;
+
+    // Format date helper function
+    const formatDate = (date) => {
+      const options = {
+        day: 'numeric',
+        month: 'long', 
+        year: 'numeric'
+      };
+      return new Date(date).toLocaleDateString('id-ID', options);
+    };
+
+    const data = {
+      nomor_surat,
+      tanggal_surat: formatDate(currentDate),
+      tanggal_pendek,
+      perihal,
+      detail_perihal,
+      pejabat,
+      nama_perguruan_tinggi,
+      tanggal_diajukan: formatDate(tanggal_diajukan),
+      nama_peneliti,
+      nim_peneliti, 
+      program_studi,
+      judul_penelitian,
+      nama_perusahaan,
+      cabang,
+      nama_penerima,
+      jabatan_penerima
+    };
+
+    // Load template
+    const templatePath = path.resolve(__dirname, "templatPengambilanData.docx");
+    if (!fs.existsSync(templatePath)) {
+      throw new Error(`Template file not found: templatPengambilanData.docx`);
+    }
+
+    // Generate document
+    const content = fs.readFileSync(templatePath, "binary");
+    const zip = new PizZip(content);
+    const doc = new Docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+    });
+
+    doc.render(data);
+    const docxBuf = doc.getZip().generate({type: "nodebuffer"});
+
+    // Convert to PDF
+    const pdfBuf = await convert(docxBuf, ".pdf", undefined);
+
+    // Send response
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", "attachment; filename=surat_pengambilan_data.pdf");
+    res.setHeader("Content-Length", pdfBuf.length);
+    res.send(pdfBuf);
+
+  } catch (error) {
+    console.error("Error in generateSuratPengambilanData:", error);
+    return res.status(500).json({
+      status: "error",
+      message: "Internal server error", 
+      error: error.message
+    });
+  }
+}
+
 module.exports = {
   createJadwalPendaftaran,
   getAllUnitKerja,
@@ -2821,5 +2918,6 @@ module.exports = {
   getAllPermintaanMagang,
   getPermintaanMagangById,
   approveStatusPermintaanMagang,
-  rejectedStatusPermintaanMagang
+  rejectedStatusPermintaanMagang,
+  generateSuratPengambilanData
 };
