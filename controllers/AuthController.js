@@ -85,7 +85,9 @@ const login = async (req, res) => {
           attributes: ["id", "name"],
         },
       });
-      console.log(karyawan);
+
+
+      const lengkap = karyawan.nama && karyawan.nik && karyawan.nomorHp && karyawan.jabatan ? true : false;
 
       return res.status(200).json({
         error: false,
@@ -97,6 +99,7 @@ const login = async (req, res) => {
           email: user.email,
           role: role.name,
           UnitKerja: karyawan.UnitKerja.name,
+          lengkap: lengkap
         },
       });
     } else {
