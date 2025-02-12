@@ -2872,7 +2872,7 @@ const generateSuratPengambilanData = async (req, res) => {
 
     // Send response
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", "attachment; filename=surat_pengambilan_data.pdf");
+    res.setHeader("Content-Disposition", `attachment; filename=surat_pengambilan_data_${nama_peneliti}.pdf`);
     res.setHeader("Content-Length", pdfBuf.length);
     res.send(pdfBuf);
 
