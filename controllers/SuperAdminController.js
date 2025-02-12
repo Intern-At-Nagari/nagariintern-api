@@ -28,7 +28,7 @@ const libre = require("libreoffice-convert");
 const util = require("util");
 const convert = util.promisify(libre.convert);
 const nodemailer = require("nodemailer");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 const { get } = require("http");
 const ejs = require('ejs');
 
