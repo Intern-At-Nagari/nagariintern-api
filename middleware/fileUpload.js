@@ -13,18 +13,24 @@ const storage = multer.diskStorage({
   }
 });
 
+// Perbaikan pada fileFilter untuk throw error yang proper
 const fileFilter = (req, file, cb) => {
   if (file.mimetype === 'application/pdf') {
     cb(null, true);
   } else {
-    cb(new Error('Hanya file PDF yang diizinkan!'), false);
+    // Ubah pesan error agar lebih spesifik
+    const error = new Error(`File ${file.fieldname} harus berformat PDF`);
+    error.code = 'INVALID_FILE_TYPE';
+    cb(error, false);
   }
 };
 
 const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 } 
+  limits: { 
+    fileSize: 2 * 1024 * 1024 // 2MB
+  }
 });
 
 const uploadFields = upload.fields([
@@ -37,9 +43,33 @@ const uploadFields = upload.fields([
   { name: 'fileSuratPernyataanSiswa', maxCount: 1 },
   { name: 'fileSuratPernyataanWali', maxCount: 1 },
   { name: 'fileTabungan', maxCount: 1 },
-  { name: 'fileRekap', maxCount: 1 },
-
-
+  { name: 'fileRekap', maxCount: 1 }
 ]);
 
-module.exports = uploadFields;
+// Middleware untuk handle multer errors
+const uploadMiddleware = (req, res, next) => {
+  uploadFields(req, res, function (err) {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Ukuran file terlalu besar. Maksimal 2MB'
+        });
+      }
+      if (err.code === 'INVALID_FILE_TYPE') {
+        return res.status(400).json({
+          status: 'error',
+          message: err.message
+        });
+      }
+      // Handle error lainnya
+      return res.status(400).json({
+        status: 'error',
+        message: err.message || 'Error saat upload file'
+      });
+    }
+    next();
+  });
+};
+
+module.exports = uploadMiddleware;
