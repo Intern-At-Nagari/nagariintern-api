@@ -1,60 +1,61 @@
 const express = require('express');
-const cors = require('cors');
-const app = express();
-const port = process.env.PORT || 3000;
 const path = require('path');
 
+const app = express();
+const port = process.env.PORT || 3000;
 const env = process.env.NODE_ENV || 'development';
 const config = require(__dirname + '/config/config.js')[env];
 
+// Middleware
+app.use(express.json()); // JSON parsing
 
-const corsOptions = {
-  origin: [
-      'https://techfuture.my.id',
-      'https://adminnagariintern-0e7da3590c83.herokuapp.com',
-      'http://localhost:3000',
-      'http://localhost:5173',
-      'http://localhost:5001',
-  ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-access-token'],
-  credentials: true,
-  optionsSuccessStatus: 200
-};
+// CORS Middleware - Pastikan browser bisa mengakses API
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-access-token");
+  res.header("Access-Control-Allow-Credentials", "true");
 
-// Use CORS middleware with options
-app.use(cors(corsOptions));
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+  next();
+});
 
-const indexRouter = require("./routes/intern");
-const authRouter = require("./routes/auth");
-const proxyRouter = require("./routes/proxy");
-const superadminRouter = require("./routes/superAdmin");
-const adminRouter = require("./routes/adminCabang"); 
+// Logging for debugging requests
+app.use((req, res, next) => {
+  console.log(`Incoming request: ${req.method} ${req.url}`);
+  console.log('Origin:', req.headers.origin);
+  next();
+});
 
-
-
-// Middleware to parse JSON bodies
-app.use(express.json());
-
+// Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-
+// View engine setup
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'public/template'));
 
+// Routes
+const indexRouter = require('./routes/intern');
+const authRouter = require('./routes/auth');
+const proxyRouter = require('./routes/proxy');
+const superadminRouter = require('./routes/superAdmin');
+const adminRouter = require('./routes/adminCabang');
+
+app.use('/', indexRouter);
+app.use('/auth', authRouter);
+app.use('/api', proxyRouter);
+app.use('/admin', adminRouter);
+app.use('/superadmin', superadminRouter);
+
+// Root endpoint
 app.get('/', (req, res) => {
   res.send('Hello, Express!');
 });
 
-// API routes
-app.use("/", indexRouter);
-app.use("/auth", authRouter);
-app.use("/api", proxyRouter);
-app.use("/admin", adminRouter);
-app.use("/superadmin", superadminRouter);
-
-// Start the server
+// Start server
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
 });

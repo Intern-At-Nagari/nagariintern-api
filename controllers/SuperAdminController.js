@@ -1520,15 +1520,13 @@ const getPermintaanMagangById = async (req, res) => {
       });
     }
 
-    // Transform dokumen array into object with tipeDokumen as keys
+    // Transform dokumen array to match the desired format
     const transformedData = {
       ...permintaanMagang.toJSON(),
-      dokumen: permintaanMagang.Dokumens.reduce((acc, doc) => {
-        if (doc.tipeDokumen) {
-          acc[doc.tipeDokumen.name.toLowerCase().replace(/\s+/g, '_')] = doc.url;
-        }
-        return acc;
-      }, {}),
+      dokumen: permintaanMagang.Dokumens.map((doc) => ({
+        tipe: doc.tipeDokumen?.name || doc.tipe,
+        url: doc.url
+      })),
     };
 
     // Remove the original Dokumens array
@@ -1543,7 +1541,6 @@ const getPermintaanMagangById = async (req, res) => {
     });
   }
 };
-
 const approveStatusPermintaanMagang = async (req, res) => {
   try {
     const { id } = req.params;
@@ -2418,12 +2415,22 @@ const dahsboardData = async (_, res) => {
 
 const getSelesai = async (req, res) => {
   try {
-
-    // Then get all data with status 7
+    // Get query parameters for filtering
+    const { year, type } = req.query;
+    console.log(req.query);
+    // Base where condition - status 7 (completed)
+    const whereCondition = {
+      statusId: 7,
+    };
+    
+    // Add type filter if provided
+    if (type && ['siswa', 'mahasiswa'].includes(type)) {
+      whereCondition.type = type;
+    }
+    
+    // Fetch all completed internships with all required data
     const permintaan = await Permintaan.findAll({
-      where: {
-        statusId: 7,
-      },
+      where: whereCondition,
       include: [
         {
           model: Users,
@@ -2454,6 +2461,10 @@ const getSelesai = async (req, res) => {
           attributes: ["id", "name"],
         },
         {
+          model: Jurusan,
+          attributes: ["id", "name"],
+        },
+        {
           model: UnitKerja,
           as: "UnitKerjaPenempatan",
           attributes: ["id", "name"],
@@ -2465,9 +2476,20 @@ const getSelesai = async (req, res) => {
         },
       ],
       attributes: ["id", "type", "tanggalMulai", "tanggalSelesai", "createdAt"],
+      order: [["tanggalMulai", "DESC"]], // Sort by start date, newest first
     });
+    
+    // If year filter is provided, filter the results on the server
+    let filteredResults = permintaan;
+    if (year) {
+      filteredResults = permintaan.filter(item => {
+        if (!item.tanggalMulai) return false;
+        const itemYear = new Date(item.tanggalMulai).getFullYear().toString();
+        return itemYear === year;
+      });
+    }
 
-    return res.status(200).json(permintaan);
+    return res.status(200).json(filteredResults);
   } catch (error) {
     console.error("Error:", error);
     return res.status(500).json({
@@ -2477,6 +2499,397 @@ const getSelesai = async (req, res) => {
     });
   }
 };
+
+// New endpoint for exporting data to Excel
+const exportToExcel = async (req, res) => {
+  try {
+    const { year, type } = req.query;
+    
+    if (!year) {
+      return res.status(400).json({
+        status: "error",
+        message: "Year parameter is required",
+      });
+    }
+    
+    // Base where condition - status 7 (completed)
+    const whereCondition = {
+      statusId: 7,
+    };
+    
+    // Sequelize literal for filtering by year
+    const yearStart = `${year}-01-01`;
+    const yearEnd = `${year}-12-31`;
+    whereCondition.tanggalMulai = {
+      [Op.between]: [yearStart, yearEnd],
+    };
+    
+    // Fetch filtered data without type filter first to get all data
+    const permintaan = await Permintaan.findAll({
+      where: whereCondition,
+      include: [
+        {
+          model: Users,
+          include: [
+            {
+              model: Mahasiswa,
+              attributes: ["name", "nim", "no_hp", "alamat"],
+              required: false,
+            },
+            {
+              model: Siswa,
+              attributes: ["name", "nisn", "no_hp", "alamat"],
+              required: false,
+            },
+          ],
+          attributes: ["email"],
+        },
+        {
+          model: PerguruanTinggi,
+          attributes: ["name"],
+        },
+        {
+          model: Prodi,
+          attributes: ["name"],
+        },
+        {
+          model: Smk,
+          attributes: ["name"],
+        },
+        {
+          model: Jurusan,
+          attributes: ["name"],
+        },
+        {
+          model: UnitKerja,
+          as: "UnitKerjaPenempatan",
+          attributes: ["name"],
+        },
+      ],
+      attributes: ["id", "type", "tanggalMulai", "tanggalSelesai"],
+      order: [["tanggalMulai", "DESC"]],
+    });
+    
+    // Filter data based on type if specified
+    let filteredData = permintaan;
+    if (type && ['siswa', 'mahasiswa'].includes(type)) {
+      filteredData = permintaan.filter(item => item.type === type);
+    }
+    
+    // Helper function to format date in Indonesian
+    const formatDateIndo = (dateString) => {
+      const date = new Date(dateString);
+      const day = date.getDate();
+      const month = date.getMonth();
+      
+      // Array of month names in Indonesian
+      const monthNames = [
+        'JANUARI', 'FEBRUARI', 'MARET', 'APRIL', 'MEI', 'JUNI',
+        'JULI', 'AGUSTUS', 'SEPTEMBER', 'OKTOBER', 'NOVEMBER', 'DESEMBER'
+      ];
+      
+      const year = date.getFullYear();
+      return `${day} ${monthNames[month]} ${year}`;
+    };
+    
+    // Format mahasiswa data
+    const formatMahasiswaData = (item) => {
+      const user = item.User?.Mahasiswas?.[0];
+      return {
+        nama: user?.name || '-',
+        nik: '-',
+        nim: user?.nim || '-',
+        institusi: item.PerguruanTinggi?.name || '-',
+        program: item.Prodi?.name || '-',
+        penempatan: item.UnitKerjaPenempatan?.name || '-',
+        tanggal_mulai: item.tanggalMulai ? formatDateIndo(item.tanggalMulai) : '-',
+        tanggal_selesai: item.tanggalSelesai ? formatDateIndo(item.tanggalSelesai) : '-',
+        no_hp: user?.no_hp || '-',
+      };
+    };
+    
+    // Format siswa data
+    const formatSiswaData = (item) => {
+      const user = item.User?.Siswas?.[0];
+      return {
+        nama: user?.name || '-',
+        nik: '-',
+        nisn: user?.nisn || '-',
+        institusi: item.Smk?.name || '-',
+        program: item.Jurusan?.name || '-',
+        penempatan: item.UnitKerjaPenempatan?.name || '-',
+        tanggal_mulai: item.tanggalMulai ? formatDateIndo(item.tanggalMulai) : '-',
+        tanggal_selesai: item.tanggalSelesai ? formatDateIndo(item.tanggalSelesai) : '-',
+        no_hp: user?.no_hp || '-',
+      };
+    };
+    
+    // Separate data for mahasiswa and siswa
+    const mahasiswaData = filteredData
+      .filter(item => item.type === 'mahasiswa')
+      .map(formatMahasiswaData);
+    
+    const siswaData = filteredData
+      .filter(item => item.type === 'siswa')
+      .map(formatSiswaData);
+    
+    // Create workbook
+    const workbook = new Excel.Workbook();
+    
+    // Add mahasiswa worksheet if there's data or if specifically requested
+    if (mahasiswaData.length > 0 || type === 'mahasiswa') {
+      const worksheetMahasiswa = workbook.addWorksheet('Mahasiswa');
+      
+      // Add title
+      const titleRow = worksheetMahasiswa.addRow([`DAFTAR PENEMPATAN MAHASISWA MAGANG PADA BANK NAGARI TAHUN ${year}`]);
+      titleRow.font = { bold: true, size: 14 };
+      worksheetMahasiswa.mergeCells('A1:I1');
+      titleRow.alignment = { horizontal: 'center' };
+      
+      // Add empty row
+      worksheetMahasiswa.addRow([]);
+      
+      // Add headers with merged cells for period
+      worksheetMahasiswa.addRow([
+        'Nama', 'NIK', 'NIM', 'Universitas', 'Program Studi', 'Penempatan', 'Periode Magang', '', 'No HP'
+      ]);
+      worksheetMahasiswa.mergeCells('G3:H3');
+      
+      // Add subheaders for dates
+      const subHeaderRow = worksheetMahasiswa.addRow([
+        '', '', '', '', '', '', 'Tanggal Mulai', 'Tanggal Selesai', ''
+      ]);
+      
+      // Style headers
+      for (let i = 1; i <= 9; i++) {
+        worksheetMahasiswa.getCell(`${String.fromCharCode(64 + i)}3`).font = { bold: true };
+        worksheetMahasiswa.getCell(`${String.fromCharCode(64 + i)}4`).font = { bold: true };
+      }
+      
+      // Set columns
+      worksheetMahasiswa.columns = [
+        { key: 'nama', width: 30 },
+        { key: 'nik', width: 20 },
+        { key: 'nim', width: 20 },
+        { key: 'institusi', width: 30 },
+        { key: 'program', width: 25 },
+        { key: 'penempatan', width: 30 },
+        { key: 'tanggal_mulai', width: 20 },
+        { key: 'tanggal_selesai', width: 20 },
+        { key: 'no_hp', width: 15 },
+      ];
+      
+      // Add rows
+      mahasiswaData.forEach(data => {
+        worksheetMahasiswa.addRow({
+          nama: data.nama,
+          nik: data.nik,
+          nim: data.nim,
+          institusi: data.institusi,
+          program: data.program,
+          penempatan: data.penempatan,
+          tanggal_mulai: data.tanggal_mulai,
+          tanggal_selesai: data.tanggal_selesai,
+          no_hp: data.no_hp
+        });
+      });
+      
+      // Add borders to all cells
+      worksheetMahasiswa.eachRow({ includeEmpty: true }, function(row, rowNumber) {
+        row.eachCell({ includeEmpty: true }, function(cell, colNumber) {
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+          };
+        });
+      });
+    }
+    
+    // Add siswa worksheet if there's data or if specifically requested
+    if (siswaData.length > 0 || type === 'siswa') {
+      const worksheetSiswa = workbook.addWorksheet('Siswa');
+      
+      // Add title
+      const titleRow = worksheetSiswa.addRow([`DAFTAR PENEMPATAN SISWA MAGANG PADA BANK NAGARI TAHUN ${year}`]);
+      titleRow.font = { bold: true, size: 14 };
+      worksheetSiswa.mergeCells('A1:I1');
+      titleRow.alignment = { horizontal: 'center' };
+      
+      // Add empty row
+      worksheetSiswa.addRow([]);
+      
+      // Add headers with merged cells for period
+      worksheetSiswa.addRow([
+        'Nama', 'NIK', 'NISN', 'Sekolah', 'Jurusan', 'Penempatan', 'Periode Magang', '', 'No HP'
+      ]);
+      worksheetSiswa.mergeCells('G3:H3');
+      
+      // Add subheaders for dates
+      worksheetSiswa.addRow([
+        '', '', '', '', '', '', 'Tanggal Mulai', 'Tanggal Selesai', ''
+      ]);
+      
+      // Style headers
+      for (let i = 1; i <= 9; i++) {
+        worksheetSiswa.getCell(`${String.fromCharCode(64 + i)}3`).font = { bold: true };
+        worksheetSiswa.getCell(`${String.fromCharCode(64 + i)}4`).font = { bold: true };
+      }
+      
+      // Set columns
+      worksheetSiswa.columns = [
+        { key: 'nama', width: 30 },
+        { key: 'nik', width: 20 },
+        { key: 'nisn', width: 20 },
+        { key: 'institusi', width: 30 },
+        { key: 'program', width: 25 },
+        { key: 'penempatan', width: 30 },
+        { key: 'tanggal_mulai', width: 20 },
+        { key: 'tanggal_selesai', width: 20 },
+        { key: 'no_hp', width: 15 },
+      ];
+      
+      // Add rows
+      siswaData.forEach(data => {
+        worksheetSiswa.addRow({
+          nama: data.nama,
+          nik: data.nik,
+          nisn: data.nisn,
+          institusi: data.institusi,
+          program: data.program,
+          penempatan: data.penempatan,
+          tanggal_mulai: data.tanggal_mulai,
+          tanggal_selesai: data.tanggal_selesai,
+          no_hp: data.no_hp
+        });
+      });
+      
+      // Add borders to all cells
+      worksheetSiswa.eachRow({ includeEmpty: true }, function(row, rowNumber) {
+        row.eachCell({ includeEmpty: true }, function(cell, colNumber) {
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+          };
+        });
+      });
+    }
+    
+    // If no specific type was requested and no data was found, add an empty sheet
+    if (!type && mahasiswaData.length === 0 && siswaData.length === 0) {
+      const worksheet = workbook.addWorksheet('Rekap Magang');
+      
+      // Add title
+      const titleRow = worksheet.addRow([`DAFTAR PENEMPATAN MAGANG PADA BANK NAGARI TAHUN ${year}`]);
+      titleRow.font = { bold: true, size: 14 };
+      worksheet.mergeCells('A1:I1');
+      titleRow.alignment = { horizontal: 'center' };
+      
+      // Add empty row
+      worksheet.addRow([]);
+      
+      // Add headers with merged cells for period
+      worksheet.addRow([
+        'Nama', 'NIK', 'ID', 'Institusi', 'Program', 'Penempatan', 'Periode Magang', '', 'No HP'
+      ]);
+      worksheet.mergeCells('G3:H3');
+      
+      // Add subheaders for dates
+      worksheet.addRow([
+        '', '', '', '', '', '', 'Tanggal Mulai', 'Tanggal Selesai', ''
+      ]);
+      
+      // Style headers
+      for (let i = 1; i <= 9; i++) {
+        worksheet.getCell(`${String.fromCharCode(64 + i)}3`).font = { bold: true };
+        worksheet.getCell(`${String.fromCharCode(64 + i)}4`).font = { bold: true };
+      }
+      
+      // Set columns
+      worksheet.columns = [
+        { key: 'nama', width: 30 },
+        { key: 'nik', width: 20 },
+        { key: 'id', width: 20 },
+        { key: 'institusi', width: 30 },
+        { key: 'program', width: 25 },
+        { key: 'penempatan', width: 30 },
+        { key: 'tanggal_mulai', width: 20 },
+        { key: 'tanggal_selesai', width: 20 },
+        { key: 'no_hp', width: 15 },
+      ];
+      
+      // Add borders to all cells
+      worksheet.eachRow({ includeEmpty: true }, function(row, rowNumber) {
+        row.eachCell({ includeEmpty: true }, function(cell, colNumber) {
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+          };
+        });
+      });
+    }
+    
+    // Set content type and disposition
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    
+    const typeText = type === 'siswa' ? 'Siswa' : 
+                    type === 'mahasiswa' ? 'Mahasiswa' : 'Semua';
+    const fileName = `Rekap_Magang_${typeText}_${year}.xlsx`;
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=${fileName}`
+    );
+    
+    // Write to response
+    await workbook.xlsx.write(res);
+    res.end();
+    
+  } catch (error) {
+    console.error("Export Error:", error);
+    return res.status(500).json({
+      status: "error",
+      message: "Internal server error during export",
+      error: error.message,
+    });
+  }
+};
+
+// Helper functions for formatting data
+function formatMahasiswaData(item) {
+  const user = item.User?.Mahasiswas?.[0];
+  return {
+    nama: user?.name || '-',
+    nim: user?.nim || '-',
+    institusi: item.PerguruanTinggi?.name || '-',
+    program: item.Prodi?.name || '-',
+    penempatan: item.UnitKerjaPenempatan?.name || '-',
+    tanggal_mulai: item.tanggalMulai ? new Date(item.tanggalMulai).toLocaleDateString('id-ID') : '-',
+    tanggal_selesai: item.tanggalSelesai ? new Date(item.tanggalSelesai).toLocaleDateString('id-ID') : '-',
+    no_hp: user?.no_hp || '-',
+  };
+}
+
+function formatSiswaData(item) {
+  const user = item.User?.Siswas?.[0];
+  return {
+    nama: user?.name || '-',
+    nisn: user?.nisn || '-',
+    institusi: item.Smk?.name || '-',
+    program: item.Jurusan?.name || '-',
+    penempatan: item.UnitKerjaPenempatan?.name || '-',
+    tanggal_mulai: item.tanggalMulai ? new Date(item.tanggalMulai).toLocaleDateString('id-ID') : '-',
+    tanggal_selesai: item.tanggalSelesai ? new Date(item.tanggalSelesai).toLocaleDateString('id-ID') : '-',
+    no_hp: user?.no_hp || '-',
+  };
+}
 
 const getDetailSelesai = async (req, res) => {
   try {
@@ -2919,5 +3332,6 @@ module.exports = {
   getPermintaanMagangById,
   approveStatusPermintaanMagang,
   rejectedStatusPermintaanMagang,
-  generateSuratPengambilanData
+  generateSuratPengambilanData,
+  exportToExcel
 };

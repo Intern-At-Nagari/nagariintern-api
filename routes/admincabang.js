@@ -21,7 +21,7 @@ const {
   getPermintaanMagangById,
 } = require("../controllers/SuperAdminController");
 
-router.get("/intern", verifyToken, cabangPermintaanMagang);
+router.get("/interns", verifyToken, cabangPermintaanMagang);
 router.get("/intern/:id", verifyToken, getPermintaanMagangById);
 
 router.get("/absensi", verifyToken, getAbsensi);
