@@ -36,7 +36,8 @@ const {
     getPermintaanMagangById,
     approveStatusPermintaanMagang,
     rejectedStatusPermintaanMagang,
-    generateSuratPengambilanData
+    generateSuratPengambilanData,
+    exportToExcel
 } = require('../controllers/SuperAdminController');
 
 router.get('/unit-kerja', verifyToken, getAllUnitKerja);
@@ -45,6 +46,7 @@ router.get('/account-pegawai-cabang', verifyToken, getAccountPegawai);
 router.get('/dashboard', verifyToken, dahsboardData);
 
 router.get('/interns/done', verifyToken, getSelesai);
+router.get('/interns/export', verifyToken, exportToExcel);
 router.get('/intern/done/:id', verifyToken, getDetailSelesai);
 router.get('/absensi/rekap', verifyToken, getRekapAbsensi);
 router.get('/interns/start', verifyToken, getMulaiMagang);
@@ -53,7 +55,7 @@ router.get('/uploads/:filename', (req, res) => {
     const filePath = path.join(__dirname, '../uploads', filename);
     res.sendFile(filePath);
 });
-router.get('/intern', verifyToken, getAllPermintaanMagang);
+router.get('/interns', verifyToken, getAllPermintaanMagang);
 router.get('/interns/diterima', verifyToken, permintaanDiterima)
 router.get('/intern/diterima/univ/:idUniv/:idProdi', detailUnivDiterima)
 router.get('/intern/diverifikasi/univ/:idUniv/:idProdi/:unitKerjaId', detailUnivDiverifikasi)
