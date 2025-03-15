@@ -1,6 +1,5 @@
 'use strict';
 
-const { all } = require('axios');
 
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
