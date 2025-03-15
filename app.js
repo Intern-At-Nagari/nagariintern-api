@@ -9,12 +9,31 @@ const config = require(__dirname + '/config/config.js')[env];
 // Middleware
 app.use(express.json()); // JSON parsing
 
-// CORS Middleware - Pastikan browser bisa mengakses API
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-access-token");
-  res.header("Access-Control-Allow-Credentials", "true");
+const corsOptions = {
+  origin: [
+      'https://techfuture.my.id',
+      'https://adminnagariintern-0e7da3590c83.herokuapp.com',
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'http://localhost:5000',
+      'http://localhost:5001',
+
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-access-token'],
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+
+// Use CORS middleware with options
+app.use(cors(corsOptions));
+
+const indexRouter = require("./routes/intern");
+const authRouter = require("./routes/auth");
+const proxyRouter = require("./routes/proxy");
+const superadminRouter = require("./routes/superAdmin");
+const adminRouter = require("./routes/adminCabang"); 
+
 
   if (req.method === "OPTIONS") {
     return res.sendStatus(204);

@@ -1546,39 +1546,51 @@ const approveStatusPermintaanMagang = async (req, res) => {
     const { id } = req.params;
     const { penempatan } = req.body;
 
-    console.log(req.body);
-    const permintaanMagang = await Permintaan.findByPk(id);
+    const permintaanMagang = await Permintaan.findByPk(id, {
+      include: [
+        {
+          model: Jadwal
+        }
+      ]
+    });
 
     if (!permintaanMagang) {
-      return res
-        .status(404)
-        .json({ error: "Permintaan magang tidak ditemukan." });
+      return res.status(404).json({ 
+        error: "Permintaan magang tidak ditemukan." 
+      });
+    }
+
+    // Check if the jadwal exists and current date is after tanggalTutup
+    if (!permintaanMagang.Jadwal || new Date() <= new Date(permintaanMagang.Jadwal.tanggalTutup)) {
+      return res.status(400).json({ 
+        error: "Tidak dapat melakukan approval sebelum periode pendaftaran selesai" 
+      });
     }
 
     // Validate penempatan exists in UnitKerja
-    if (penempatan) {
+    if (penempatan)  {
       const unitKerja = await UnitKerja.findByPk(penempatan);
       if (!unitKerja) {
-        return res
-          .status(400)
-          .json({ error: "Unit kerja penempatan tidak valid" });
+        return res.status(400).json({ 
+          error: "Unit kerja penempatan tidak valid" 
+        });
       }
 
       // Check and update quota based on internship type
       if (permintaanMagang.type === "siswa") {
         if (unitKerja.kuotaSiswa <= 0) {
-          return res
-            .status(400)
-            .json({ error: "Kuota siswa magang sudah penuh" });
+          return res.status(400).json({ 
+            error: "Kuota siswa magang sudah penuh" 
+          });
         }
         await unitKerja.update({
           kuotaSiswa: unitKerja.kuotaSiswa - 1,
         });
       } else if (permintaanMagang.type === "mahasiswa") {
         if (unitKerja.kuotaMhs <= 0) {
-          return res
-            .status(400)
-            .json({ error: "Kuota mahasiswa magang sudah penuh" });
+          return res.status(400).json({ 
+            error: "Kuota mahasiswa magang sudah penuh" 
+          });
         }
         await unitKerja.update({
           kuotaMhs: unitKerja.kuotaMhs - 1,
@@ -1600,10 +1612,7 @@ const approveStatusPermintaanMagang = async (req, res) => {
       data: permintaanMagang,
     });
   } catch (error) {
-    console.error(
-      "Error in approveStatusPermintaanMagang:",
-      error.message || error
-    );
+    console.error("Error in approveStatusPermintaanMagang:", error.message || error);
     res.status(500).json({ error: "Terjadi kesalahan pada server." });
   }
 };
