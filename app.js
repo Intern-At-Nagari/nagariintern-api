@@ -17,6 +17,9 @@ const corsOptions = {
       'http://localhost:5173',
       'http://localhost:5000',
       'http://localhost:5001',
+      'http://localhost:4173',
+      'http://10.44.10.80:4173/'
+
 
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
